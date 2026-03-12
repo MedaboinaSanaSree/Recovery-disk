@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RECOVERY DISK | Private Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
+    <style>
+        :root { 
+            --gold: #d4af37; 
+            --primary: #00f2fe;
+            --bg: #050505; 
+            --glass: rgba(255, 255, 255, 0.05);
+            --card-bg: rgba(20, 20, 20, 0.85);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Poppins', sans-serif; }
+        
+        body { 
+            background: var(--bg); 
+            color: #fff; 
+            overflow-x: hidden; 
+            min-height: 100vh;
+            font-size: 16px; /* Increased base font size */
+        }
+
+        /* 3D BACKGROUND */
+        #bg-canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; }
+
+        /* GATEWAY OVERLAY */
+        #passGate { 
+            position: fixed; top:0; left:0; width:100%; height:100%; 
+            background: rgba(0,0,0,0.95); z-index: 99999; 
+            display: flex; align-items:center; justify-content:center;
+            backdrop-filter: blur(20px);
+        }
+        .gate-box { 
+            background: var(--card-bg); padding: 50px; border-radius: 24px; 
+            border: 2px solid var(--gold); text-align: center;
+            box-shadow: 0 0 50px rgba(212, 175, 55, 0.15);
+            max-width: 450px; width: 90%;
+        }
+        .gate-box h2 { font-size: 1.8rem; margin-bottom: 15px; }
+        .gate-box input { 
+            padding: 16px; margin-bottom: 25px; border-radius: 12px; 
+            border: 1px solid #444; background: #000; color: var(--gold);
+            text-align: center; width: 100%; outline: none; font-size: 1.1rem;
+        }
+
+        /* DASHBOARD CONTENT */
+        #adminContent { padding: 40px 6%; animation: fadeIn 0.8s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .header-bar { 
+            background: rgba(20, 20, 20, 0.8); padding: 30px; border-radius: 20px; 
+            display: flex; justify-content: space-between; align-items: center; 
+            border: 1px solid rgba(212, 175, 55, 0.3); margin-bottom: 50px; 
+            backdrop-filter: blur(15px);
+        }
+        .header-bar h1 { font-size: 1.8rem; font-weight: 800; letter-spacing: -1px; }
+
+        .admin-badge { text-align: right; margin-right: 25px; }
+        .admin-badge b { color: var(--gold); font-size: 18px; display: block; }
+        .admin-badge span { color: #888; font-size: 13px; text-transform: uppercase; letter-spacing: 2px; }
+
+        /* CARDS */
+        .card { 
+            background: var(--glass); padding: 35px; border-radius: 20px; 
+            margin-bottom: 35px; border: 1px solid rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+        }
+        .card h3 { font-size: 1.4rem; margin-bottom: 25px; font-weight: 600; }
+        
+        .match-card { 
+            background: rgba(0, 242, 254, 0.07); padding: 25px; border-radius: 15px; 
+            margin-bottom: 20px; border-left: 6px solid var(--gold); 
+            transition: all 0.3s ease;
+        }
+        .match-card:hover { background: rgba(0, 242, 254, 0.12); transform: scale(1.02); }
+        .match-card strong { font-size: 1.2rem; display: block; margin-bottom: 5px; }
+
+        /* REGISTRY */
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; }
+        .registry-item {
+            background: rgba(0,0,0,0.5); padding: 20px; border-radius: 12px; 
+            margin-bottom: 15px; border-left: 4px solid #444; font-size: 15px;
+            transition: 0.3s; line-height: 1.6;
+        }
+        .registry-item:hover { border-left-color: var(--gold); background: rgba(255,255,255,0.03); }
+
+        /* BUTTONS */
+        .btn-unlock, .btn-action { 
+            padding: 15px 35px; background: var(--gold); border: none; 
+            font-weight: 800; cursor: pointer; border-radius: 10px; 
+            text-transform: uppercase; transition: 0.3s; font-size: 1rem;
+        }
+        .btn-logout { 
+            background: #ff4b2b; color: white; border: none; padding: 12px 25px; 
+            border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 0.9rem;
+        }
+        .btn-logout:hover { background: #ff0000; }
+
+        @media (max-width: 900px) { .stats-grid { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+
+    <canvas id="bg-canvas"></canvas>
+
+    <div id="passGate">
+        <div class="gate-box">
+            <h2 style="color: var(--gold); letter-spacing: 3px;">ADMIN ACCESS</h2>
+            <p style="color: #888; font-size: 14px; margin-bottom: 25px;">Encrypted Environment | Batch 7</p>
+            <input type="password" id="entryKey" placeholder="Enter Secure Pass Key">
+            <button class="btn-unlock" onclick="unlock()">Authorize</button>
+        </div>
+    </div>
+
+    <div id="adminContent" style="display: none;">
+        <div class="header-bar">
+            <h1>RECOVERY <span style="color:var(--gold)">DISK</span></h1>
+            <div style="display: flex; align-items: center;">
+                <div class="admin-badge">
+                    <b id="cornerName">---</b>
+                    <span id="cornerID">ID: ---</span>
+                </div>
+                <button class="btn-logout" onclick="logout()">Secure Logout</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3 style="color:var(--gold);"><i class="fas fa-microchip"></i> Similarity Intelligence (75%+)</h3>
+            <div id="matchList" style="color: #888; font-style: italic;">Awaiting Synchronization...</div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="card">
+                <h3 style="color:#ff4b2b; border-bottom: 1px solid rgba(255,75,43,0.3); padding-bottom: 10px;">Lost Registry</h3>
+                <div id="lostList"></div>
+            </div>
+            <div class="card">
+                <h3 style="color:#2ecc71; border-bottom: 1px solid rgba(46,204,113,0.3); padding-bottom: 10px;">Found Registry</h3>
+                <div id="foundList"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /* THREE.JS BACKGROUND ENGINE */
+        const canvas = document.getElementById('bg-canvas');
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+
+        const geometry = new THREE.BufferGeometry();
+        const vertices = [];
+        for (let i = 0; i < 6000; i++) {
+            vertices.push(THREE.MathUtils.randFloatSpread(2000), THREE.MathUtils.randFloatSpread(2000), THREE.MathUtils.randFloatSpread(2000));
+        }
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+        const material = new THREE.PointsMaterial({ color: 0x00f2fe, size: 1.5, transparent: true, opacity: 0.4 });
+        const points = new THREE.Points(geometry, material);
+        scene.add(points);
+        camera.position.z = 500;
+
+        function animate() {
+            requestAnimationFrame(animate);
+            points.rotation.y += 0.0006;
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        /* FIREBASE CONFIG */
+        const firebaseConfig = { apiKey: "AiZaSyDg1bSCdLj2Em-1WhLInzHevEGT4apSM7U", projectId: "first-rtrp" };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        function unlock() {
+            const entered = document.getElementById('entryKey').value;
+            const required = localStorage.getItem("requiredPassKey");
+
+            if (entered === required && required !== null) {
+                document.getElementById('passGate').style.fadeOut = "0.5s";
+                setTimeout(() => {
+                    document.getElementById('passGate').style.display = 'none';
+                    document.getElementById('adminContent').style.display = 'block';
+                }, 300);
+
+                document.getElementById('cornerName').innerText = localStorage.getItem("tempAdminName");
+                document.getElementById('cornerID').innerText = "ID: " + localStorage.getItem("tempAdminID");
+                loadDashboard();
+            } else {
+                alert("Invalid Pass Key.");
+            }
+        }
+
+        function loadDashboard() {
+            syncData("lost_reports", "lostList", "#ff4b2b");
+            syncData("found_reports", "foundList", "#2ecc71");
+            runSimilarity();
+        }
+
+        function syncData(col, divId, color) {
+            db.collection(col).orderBy("timestamp", "desc").onSnapshot(snap => {
+                const div = document.getElementById(divId);
+                div.innerHTML = "";
+                snap.forEach(doc => {
+                    const d = doc.data();
+                    div.innerHTML += `
+                        <div class="registry-item" style="border-left-color:${color}">
+                            <strong style="color:var(--gold); font-size: 1.1rem;">${d.itemName}</strong><br>
+                            <span style="opacity: 0.7;">User: ${d.user_id}</span><br>
+                            <span style="opacity: 0.7;">Location: ${d.location}</span>
+                        </div>`;
+                });
+            });
+        }
+
+        async function runSimilarity() {
+            const lostSnap = await db.collection("lost_reports").get();
+            const foundSnap = await db.collection("found_reports").get();
+            const container = document.getElementById('matchList');
+            container.innerHTML = "";
+
+            lostSnap.forEach(lostDoc => {
+                const lost = lostDoc.data();
+                foundSnap.forEach(foundDoc => {
+                    const found = foundDoc.data();
+                    let score = 0;
+                    if (lost.itemName.toLowerCase() === found.itemName.toLowerCase()) score += 40;
+                    if (lost.location === found.location) score += 35;
+                    
+                    if (score >= 75) {
+                        container.innerHTML += `
+                        <div class="match-card">
+                            <strong style="color:var(--gold)">${lost.itemName} Correlation Found</strong>
+                            <p style="font-size:14px; color:#ccc; margin-bottom:15px;">
+                                Match Accuracy: ${score}% | Owner: ${lost.user_id} vs Finder: ${found.user_id}
+                            </p>
+                            <button class="btn-action" onclick="openReport('${lost.user_id}', '${found.user_id}', '${lost.itemName}')">
+                                Open Case File
+                            </button>
+                        </div>`;
+                    }
+                });
+            });
+        }
+
+        function openReport(oId, fId, item) {
+            window.location.href = `report.html?ownerId=${oId}&finderId=${fId}&item=${encodeURIComponent(item)}`;
+        }
+
+        function logout() { 
+            if(confirm("Terminate Admin Session?")) {
+                localStorage.clear(); 
+                window.location.href = "sign.html"; 
+            }
+        }
+    </script>
+</body>
+</html>
